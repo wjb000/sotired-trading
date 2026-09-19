@@ -1,5 +1,5 @@
 import { num } from "./format";
-import { deskPick, grade, toTx } from "./signals";
+import { deskPick, grade, MAX_SCREEN_MCAP, toTx } from "./signals";
 import type { Meta, ScreenerResponse, Token, TxWindow } from "./types";
 
 const GECKO = "https://api.geckoterminal.com/api/v2";
@@ -81,7 +81,8 @@ async function buildScreener(): Promise<ScreenerResponse> {
     accept: "application/json",
   };
 
-  const [t1h, freshRaw, metasRaw, solRaw] = await Promise.all([
+  const [t5, t1h, freshRaw, metasRaw, solRaw] = await Promise.all([
+    fetchJson(`${GECKO}/networks/solana/trending_pools?include=base_token,quote_token,dex&duration=5m`, headers),
     fetchJson(`${GECKO}/networks/solana/trending_pools?include=base_token,quote_token,dex&duration=1h`, headers),
     fetchJson(`${GECKO}/networks/solana/new_pools?include=base_token,quote_token,dex`, headers),
     fetchJson("https://api.dexscreener.com/metas/trending/v1", headers),
@@ -89,20 +90,38 @@ async function buildScreener(): Promise<ScreenerResponse> {
   ]);
 
   const merged = new Map<string, Token>();
+  ingest(merged, t5, "5m");
   ingest(merged, t1h, "1h");
-
-  const tokens = [...merged.values()]
-    .map((t) => ({ ...t, ...grade(t) }))
-    .sort((a, b) => b.score - a.score);
 
   const freshMap = new Map<string, Token>();
   ingest(freshMap, freshRaw, "new");
+  for (const t of freshMap.values()) {
+    const lifeVol = t.volume.h24 || t.volume.m5;
+    const tx = t.tx.m5.buys + t.tx.m5.sells;
+    const alive = lifeVol >= 600 && tx >= 5 && (t.liquidity >= 4_000 || t.onCurve);
+    if (alive && t.ageMin <= 180 && t.mcap <= MAX_SCREEN_MCAP) {
+      const prev = merged.get(t.mint);
+      if (!prev) merged.set(t.mint, t);
+      else prev.sources = Array.from(new Set([...prev.sources, "new"]));
+    }
+  }
+
+  const tokens = [...merged.values()]
+    .filter((t) => t.mcap <= MAX_SCREEN_MCAP && t.ageMin <= 60 * 48)
+    .map((t) => ({ ...t, ...grade(t) }))
+    .sort((a, b) => b.score - a.score);
+
   const fresh = [...freshMap.values()]
     .filter((t) => {
-      if (merged.has(t.mint)) return false;
       const lifeVol = t.volume.h24 || t.volume.m5;
       const tx = t.tx.m5.buys + t.tx.m5.sells;
-      return lifeVol >= 400 && tx >= 4 && (t.liquidity >= 1500 || t.onCurve);
+      return (
+        t.ageMin <= 90 &&
+        t.mcap <= MAX_SCREEN_MCAP &&
+        lifeVol >= 400 &&
+        tx >= 4 &&
+        (t.liquidity >= 3_000 || t.onCurve)
+      );
     })
     .map((t) => ({ ...t, ...grade(t) }))
     .sort((a, b) => b.volume.m5 - a.volume.m5)
@@ -118,13 +137,7 @@ async function buildScreener(): Promise<ScreenerResponse> {
     .slice()
     .sort((a, b) => b.change.m5 - a.change.m5)[0];
 
-  const desk = deskPick(tokens);
-  if (desk.ape.length < 3) {
-    const extra = fresh
-      .filter((t) => t.action === "APE" || t.action === "BUY")
-      .slice(0, 3 - desk.ape.length);
-    desk.ape = [...desk.ape, ...extra].slice(0, 4);
-  }
+  const desk = deskPick([...tokens, ...fresh.filter((t) => !tokens.some((x) => x.mint === t.mint))]);
 
   return {
     updatedAt: new Date().toISOString(),
@@ -160,7 +173,7 @@ function ingest(
     const name = (base?.attributes?.name || symbol).trim();
 
     if (!mint || SKIP_MINTS.has(mint) || SKIP_SYMBOLS.has(symbol.toUpperCase())) continue;
-    if (num(pool.attributes.fdv_usd) > 2_000_000_000) continue;
+    if (num(pool.attributes.fdv_usd) > MAX_SCREEN_MCAP * 1.4) continue;
     if (/wrapped\s/i.test(name) || /xstock/i.test(name)) continue;
 
     const attr = pool.attributes;
@@ -205,6 +218,7 @@ function ingest(
       action: "HOLD",
       reasons: [],
       when: "",
+      sellPlan: "",
       size: "skip",
     };
 

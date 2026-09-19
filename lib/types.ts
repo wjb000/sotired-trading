@@ -30,6 +30,7 @@ export type Token = {
   action: Action;
   reasons: string[];
   when: string;
+  sellPlan: string;
   size: SizeHint;
 };
 

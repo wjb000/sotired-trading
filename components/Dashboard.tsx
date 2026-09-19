@@ -115,6 +115,14 @@ export function Dashboard({
     });
   }, [data, filter, q, sort, watch]);
 
+  const book = useMemo(() => {
+    if (!data || watch.length === 0) return [];
+    const all = [...data.tokens, ...data.fresh];
+    return watch
+      .map((mint) => all.find((t) => t.mint === mint))
+      .filter((t): t is Token => Boolean(t));
+  }, [data, watch]);
+
   const utc = now.toISOString().slice(11, 19);
 
   return (
@@ -193,16 +201,51 @@ export function Dashboard({
               </p>
             )}
 
+            {book.length > 0 && (
+              <section className="mt-8">
+                <h2 className="font-serif text-4xl text-cream">your book</h2>
+                <p className="mt-1 text-sm text-mute">
+                  Names you tracked. This is the sell tape — flatten when it says sell.
+                </p>
+                <div className="mt-4 space-y-2">
+                  {book.map((t) => (
+                    <div key={t.mint} className="rounded-lg border border-line bg-panel px-4 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <Avatar token={t} />
+                          <div>
+                            <div className="text-cream">${t.symbol}</div>
+                            <div className="font-mono text-[10px] text-mute">
+                              {compact(t.mcap)} · {ageLabel(t.ageMin)} · 5m <Delta n={t.change.m5} />
+                            </div>
+                          </div>
+                        </div>
+                        <Badge action={t.action} />
+                      </div>
+                      <p
+                        className={`mt-2 text-sm leading-snug ${
+                          t.action === "SELL" || t.action === "FADE" ? "text-stop" : "text-cream"
+                        }`}
+                      >
+                        {t.sellPlan}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
             <h2 className="mt-10 font-serif text-4xl text-cream">the desk</h2>
             <p className="mt-1 max-w-xl text-sm text-mute">
-              What to do right now. Size is always small. If it already ran 10x, you missed it.
+              Early, low-cap names only (under ~$12M, under 2 days). Buy the left. Sell the middle.
+              Track a name to put it in your book.
             </p>
             <div className="mt-5 grid gap-4 lg:grid-cols-3">
               <DeskCol
-                title="ape these"
-                hint="buyers still in control"
+                title="buy now"
+                hint="early, still small, buyers in control"
                 tone="go"
-                empty="nothing clean enough to ape"
+                empty="nothing early enough to buy"
                 tokens={data.desk.ape}
                 watch={watch}
                 copied={copied}
@@ -210,12 +253,13 @@ export function Dashboard({
                 onCopy={copy}
                 open={open}
                 setOpen={setOpen}
+                line="when"
               />
               <DeskCol
-                title="get out"
-                hint="sellers have the tape"
+                title="sell now"
+                hint="if you're in, flatten"
                 tone="stop"
-                empty="no obvious dumps"
+                empty="no obvious dumps on the board"
                 tokens={data.desk.exit}
                 watch={watch}
                 copied={copied}
@@ -223,10 +267,11 @@ export function Dashboard({
                 onCopy={copy}
                 open={open}
                 setOpen={setOpen}
+                line="sell"
               />
               <DeskCol
-                title="leave it"
-                hint="thin, late, or dead"
+                title="too late"
+                hint="thin, old, or already cooked"
                 tone="warn"
                 empty="filter is clean"
                 tokens={data.desk.skip}
@@ -236,6 +281,7 @@ export function Dashboard({
                 onCopy={copy}
                 open={open}
                 setOpen={setOpen}
+                line="when"
               />
             </div>
 
@@ -243,7 +289,7 @@ export function Dashboard({
               <div>
                 <h2 className="font-serif text-4xl text-cream">screener</h2>
                 <p className="mt-1 text-sm text-mute">
-                  Solana trending pools. Click a row for why, and when.
+                  Low-cap Solana only. Click a row for the buy and the sell.
                 </p>
               </div>
               <input
@@ -276,7 +322,7 @@ export function Dashboard({
                       : "border-line text-mute hover:text-cream"
                   }`}
                 >
-                  {f}
+                  {f === "WATCH" ? "BOOK" : f}
                 </button>
               ))}
             </div>
@@ -328,7 +374,7 @@ export function Dashboard({
 
             <h2 className="mt-14 font-serif text-4xl text-cream">fresh</h2>
             <p className="mt-1 text-sm text-mute">
-              Just spawned. Most of these die. The ones with volume and buyers are the only ones that matter.
+              Under 90 minutes old. Most die. Only touch the ones with volume and a buy tape.
             </p>
             <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {data.fresh.length === 0 ? (
@@ -363,27 +409,27 @@ export function Dashboard({
                 <Play
                   title="buy"
                   items={[
-                    "15 minutes to 6 hours old, liquidity over $20k, more buys than sells.",
-                    "5m is green but not already +50%. You want grind, not a wick.",
-                    "If it just dumped and buyers ate the dip, that's the entry. Not the first green candle of a 20x.",
-                    "Size tiny on curve / new. Size small on anything else. Never size like you know.",
+                    "Under ~$4M mcap, 8 minutes to 3 hours old, liquidity over $8k, more buys than sells.",
+                    "5m is green but not already +20%. Grind, not a wick.",
+                    "Hit track so it lands in your book — that's how you get the sell call later.",
+                    "Tiny size on curve / new. Never size like you know.",
                   ]}
                 />
                 <Play
                   title="sell"
                   items={[
-                    "5m and 1h both red. The tape flipped. You don't need a thesis.",
-                    "You're up 2x+ and volume is dying. That's the gift. Take it.",
-                    "24h already +200% and 1h rolled over — that's a fade, not a dip.",
-                    "Liquidity shrinking while price is falling. You will not get a clean exit later.",
+                    "Default exit: sell half at +80–120%. Trail the rest.",
+                    "Full out if 5m closes red, or 5m tape drops under 45% buys.",
+                    "Hard stop: 5m −12%. Don't negotiate with it.",
+                    "If 24h already ran 3x+ and 5m rolls over, you're late. Flatten, don't dip-buy.",
                   ]}
                 />
                 <Play
                   title="skip"
                   items={[
-                    "Liq under $10k. You are the exit liquidity.",
-                    "Brand new with no buyers. It's a sniper farm.",
-                    "You can't explain the when in one sentence.",
+                    "Over ~$12M or older than 2 days. That's not early.",
+                    "Liq under $5k. You are the exit liquidity.",
+                    "Brand new with no buyers. Sniper farm.",
                     "You already missed it and you're mad. That's how bags happen.",
                   ]}
                 />
@@ -432,6 +478,7 @@ function DeskCol({
   onCopy,
   open,
   setOpen,
+  line,
 }: {
   title: string;
   hint: string;
@@ -444,6 +491,7 @@ function DeskCol({
   onCopy: (mint: string) => void;
   open: string | null;
   setOpen: (mint: string | null) => void;
+  line: "when" | "sell";
 }) {
   const border =
     tone === "go" ? "border-go/40" : tone === "stop" ? "border-stop/40" : "border-warn/40";
@@ -471,7 +519,7 @@ function DeskCol({
                   <div className="min-w-0">
                     <div className="truncate font-medium text-cream">${t.symbol}</div>
                     <div className="truncate font-mono text-[10px] text-mute">
-                      {ageLabel(t.ageMin)} · {dexLabel(t.dex)} · {compact(t.liquidity)} liq
+                      {compact(t.mcap)} · {ageLabel(t.ageMin)} · {compact(t.liquidity)} liq
                     </div>
                   </div>
                 </div>
@@ -482,9 +530,14 @@ function DeskCol({
                   </div>
                 </div>
               </div>
-              <p className="mt-2 text-[13px] leading-snug text-mute">{t.when}</p>
+              <p className="mt-2 text-[13px] leading-snug text-mute">
+                {line === "sell" ? t.sellPlan : t.when}
+              </p>
               {open === t.mint && (
                 <div className="mt-3" onClick={(e) => e.stopPropagation()}>
+                  {line !== "sell" && (
+                    <p className="mb-3 text-[12px] leading-snug text-gold">{t.sellPlan}</p>
+                  )}
                   <Links
                     token={t}
                     watched={watch.includes(t.mint)}
@@ -569,6 +622,7 @@ function TokenRow({
       {open && (
         <div className="border-t border-line px-4 py-4">
           <p className="text-sm leading-relaxed text-cream">{t.when}</p>
+          <p className="mt-2 text-sm leading-relaxed text-gold">{t.sellPlan}</p>
           <ul className="mt-2 space-y-1 font-mono text-[11px] text-mute">
             {t.reasons.map((r) => (
               <li key={r}>— {r}</li>
@@ -614,7 +668,7 @@ function MiniCard({
           <div className="min-w-0">
             <div className="truncate text-cream">${t.symbol}</div>
             <div className="font-mono text-[10px] text-mute">
-              {ageLabel(t.ageMin)} · {compact(t.volume.m5)} vol
+              {compact(t.mcap)} · {ageLabel(t.ageMin)} · {compact(t.volume.m5)} vol
             </div>
           </div>
         </div>
@@ -765,7 +819,7 @@ function Links({
           watched ? "border-gold text-gold" : "border-line text-mute hover:text-cream"
         }`}
       >
-        {watched ? "watching" : "watch"}
+        {watched ? "in book" : "track"}
       </button>
     </div>
   );
