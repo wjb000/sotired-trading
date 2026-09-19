@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { lock } from "@/lib/auth";
 import { ageLabel, buyRatio, compact, dexLabel, pct, shortMint, usd } from "@/lib/format";
 import { getScreener } from "@/lib/screener";
-import type { Action, Meta, ScreenerResponse, Token } from "@/lib/types";
+import type { Action, Meta, ScreenerResponse, Token, ViralStory } from "@/lib/types";
 
 type Filter = "ALL" | Action | "WATCH";
 type SortKey = "score" | "m5" | "h1" | "h24" | "vol" | "liq" | "age";
@@ -40,7 +40,7 @@ export function Dashboard({
   const load = useCallback(async () => {
     try {
       const json = await getScreener();
-      if (!json.tokens.length && !json.fresh.length && !json.metas.length) {
+      if (!json.tokens.length && !json.fresh.length && !json.metas.length && !json.viral?.length) {
         throw new Error("screener down");
       }
       setData(json);
@@ -197,8 +197,30 @@ export function Dashboard({
             ) : (
               <p className="mt-3 font-mono text-[11px] text-mute">
                 refreshed {new Date(data.updatedAt).toISOString().slice(11, 19)} utc ·
-                gecko + dexscreener · not financial advice, just a desk
+                dexscreener tape · not financial advice, just a desk
               </p>
+            )}
+
+            {data.viral?.length > 0 && (
+              <section className="mt-10">
+                <h2 className="font-serif text-4xl text-cream">the meme</h2>
+                <p className="mt-1 max-w-2xl text-sm text-mute">
+                  Find the joke that&apos;s going nuclear. Then buy the cheaper names that sound
+                  like it — not the wick that already ran.
+                </p>
+                <div className="mt-5 space-y-4">
+                  {data.viral.map((story) => (
+                    <ViralCard
+                      key={story.viral}
+                      story={story}
+                      watch={watch}
+                      copied={copied}
+                      onWatch={toggleWatch}
+                      onCopy={copy}
+                    />
+                  ))}
+                </div>
+              </section>
             )}
 
             {book.length > 0 && (
@@ -395,7 +417,7 @@ export function Dashboard({
 
             <h2 className="mt-14 font-serif text-4xl text-cream">narratives</h2>
             <p className="mt-1 text-sm text-mute">
-              Dexscreener metas. Money rotates. Don&apos;t ape a dead story.
+              Dexscreener metas ranked by heat. Green 5m/1h means money is rotating in.
             </p>
             <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {data.metas.map((m) => (
@@ -409,10 +431,10 @@ export function Dashboard({
                 <Play
                   title="buy"
                   items={[
-                    "Under ~$4M mcap, 8 minutes to 3 hours old, liquidity over $8k, more buys than sells.",
-                    "5m is green but not already +20%. Grind, not a wick.",
-                    "Hit track so it lands in your book — that's how you get the sell call later.",
-                    "Tiny size on curve / new. Never size like you know.",
+                    "First identify the viral meme. Then buy a cheaper name that rhymes with it.",
+                    "Under ~$4M, 8 minutes to 3 hours, buyers on the 5m tape.",
+                    "Do not chase the original after it's already 3x. That's the wick. The copies are the trade.",
+                    "Track it so the sell call lands in your book.",
                   ]}
                 />
                 <Play
@@ -443,6 +465,77 @@ export function Dashboard({
           </>
         )}
       </main>
+    </div>
+  );
+}
+
+function ViralCard({
+  story,
+  watch,
+  copied,
+  onWatch,
+  onCopy,
+}: {
+  story: ViralStory;
+  watch: string[];
+  copied: string;
+  onWatch: (mint: string) => void;
+  onCopy: (mint: string) => void;
+}) {
+  return (
+    <div className="rounded-xl border border-gold/35 bg-panel p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="font-mono text-[10px] tracking-[0.22em] text-gold uppercase">
+            {story.emoji} {story.viral}
+          </div>
+          <h3 className="mt-1 max-w-xl font-serif text-2xl leading-tight text-cream">
+            {story.headline}
+          </h3>
+        </div>
+        {story.leader && (
+          <div className="text-right">
+            <div className="font-mono text-[10px] text-mute uppercase">already ripping</div>
+            <div className="text-cream">${story.leader.symbol}</div>
+            <div className="font-mono text-xs">
+              <Delta n={story.leader.change.h1} /> 1h · {compact(story.leader.mcap)}
+            </div>
+          </div>
+        )}
+      </div>
+      {story.lookalikes.length === 0 ? (
+        <p className="mt-4 font-mono text-xs text-mute">
+          no cheap rhyme on the tape yet — watch new names that sound like {story.viral}.
+        </p>
+      ) : (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {story.lookalikes.map((t) => (
+            <div key={t.mint} className="rounded-lg border border-line bg-ink/40 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-cream">${t.symbol}</div>
+                  <div className="font-mono text-[10px] text-mute">
+                    {compact(t.mcap)} · {ageLabel(t.ageMin)}
+                  </div>
+                </div>
+                <Badge action={t.action} />
+              </div>
+              <p className="mt-2 line-clamp-3 text-[12px] leading-snug text-mute">
+                {t.meme?.why || t.when}
+              </p>
+              <div className="mt-2">
+                <Links
+                  token={t}
+                  watched={watch.includes(t.mint)}
+                  copied={copied === t.mint}
+                  onWatch={() => onWatch(t.mint)}
+                  onCopy={() => onCopy(t.mint)}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -621,6 +714,11 @@ function TokenRow({
       </button>
       {open && (
         <div className="border-t border-line px-4 py-4">
+          {t.meme && (
+            <p className="mb-2 font-mono text-[11px] tracking-wide text-gold uppercase">
+              {t.meme.relation === "lookalike" ? "rhyme" : "original"} · {t.meme.viral}
+            </p>
+          )}
           <p className="text-sm leading-relaxed text-cream">{t.when}</p>
           <p className="mt-2 text-sm leading-relaxed text-gold">{t.sellPlan}</p>
           <ul className="mt-2 space-y-1 font-mono text-[11px] text-mute">
@@ -699,7 +797,9 @@ function MetaCard({ meta }: { meta: Meta }) {
           <span className="mr-2">{meta.emoji}</span>
           {meta.name}
         </div>
-        <Delta n={meta.change.h1} />
+        <span className="font-mono text-xs">
+          5m <Delta n={meta.change.m5} /> · 1h <Delta n={meta.change.h1} />
+        </span>
       </div>
       <p className="mt-1 text-[12px] text-mute">{meta.description}</p>
       <div className="mt-3 flex gap-4 font-mono text-[10px] text-mute">

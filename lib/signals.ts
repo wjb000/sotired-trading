@@ -132,6 +132,14 @@ export function grade(
   if (token.sources.includes("5m")) score += 4;
   if (token.sources.includes("new") && v.m5 >= 3_000) score += 4;
 
+  if (token.meme?.relation === "lookalike") {
+    score += 16;
+    reasons.push(token.meme.why);
+  } else if (token.meme?.relation === "leader" && (c.h1 >= 80 || c.h24 >= 150)) {
+    score -= 8;
+    reasons.push("original already ran — don't chase, buy a rhyme");
+  }
+
   score = Math.max(0, Math.min(99, Math.round(score)));
 
   const early = age <= 18 * 60 && mcap <= APE_MCAP;
@@ -149,15 +157,21 @@ export function grade(
     action = "FADE";
   } else if (
     early &&
-    score >= 68 &&
+    score >= (token.meme?.relation === "lookalike" ? 60 : 68) &&
     liq >= 8_000 &&
     c.m5 > -6 &&
-    c.m5 < 22 &&
-    c.h1 < 70 &&
-    c.h24 < 180
+    c.m5 < 28 &&
+    c.h1 < 80 &&
+    c.h24 < 200
   ) {
     action = "APE";
-  } else if (stillSmall && score >= 56 && c.m5 > -10 && c.m5 < 35 && c.h24 < 220) {
+  } else if (
+    stillSmall &&
+    score >= (token.meme?.relation === "lookalike" ? 50 : 56) &&
+    c.m5 > -10 &&
+    c.m5 < 40 &&
+    c.h24 < 250
+  ) {
     action = "BUY";
   } else if (score < 34) {
     action = "AVOID";
@@ -195,9 +209,13 @@ function writeWhen(
   const capBit = compactReason(mcap || 0);
   switch (action) {
     case "APE":
-      return `${sym} · ${ageBit} · ${capBit}. BUY NOW, ${liq < 25_000 || age < 90 ? "tiny" : "small"} size. If 5m is already ripping, wait a dip. Sell half at +80–120%, rest when 5m flips red.`;
+      return token.meme?.relation === "lookalike"
+        ? `${sym} · ${ageBit} · ${capBit}. BUY NOW — same joke as ${token.meme.viral}, still early. Tiny size. Sell half at +80–120%, rest when 5m flips red.`
+        : `${sym} · ${ageBit} · ${capBit}. BUY NOW, ${liq < 25_000 || age < 90 ? "tiny" : "small"} size. If 5m is already ripping, wait a dip. Sell half at +80–120%, rest when 5m flips red.`;
     case "BUY":
-      return `${sym} · ${ageBit} · ${capBit}. Buy a starter. Invalid if 5m closes red and stays there. Same exit: half at ~2x, flatten on a red 5m.`;
+      return token.meme?.relation === "lookalike"
+        ? `${sym} · ${ageBit} · ${capBit}. Starter size — lookalike of ${token.meme.viral}. Invalid if 5m closes red. Half off at ~2x.`
+        : `${sym} · ${ageBit} · ${capBit}. Buy a starter. Invalid if 5m closes red and stays there. Same exit: half at ~2x, flatten on a red 5m.`;
     case "HOLD":
       return `${sym}: no fresh entry. If you're already in, trail it. Sell if 5m and 1h are both red. If you're not in, skip.`;
     case "SELL":

@@ -9,6 +9,12 @@ export type TxWindow = {
   sellers: number;
 };
 
+export type MemeHit = {
+  viral: string;
+  relation: "leader" | "lookalike";
+  why: string;
+};
+
 export type Token = {
   mint: string;
   pool: string;
@@ -32,6 +38,7 @@ export type Token = {
   when: string;
   sellPlan: string;
   size: SizeHint;
+  meme?: MemeHit;
 };
 
 export type Meta = {
@@ -43,6 +50,16 @@ export type Meta = {
   volume: number;
   tokenCount: number;
   change: { m5: number; h1: number; h6: number; h24: number };
+  heat: number;
+};
+
+export type ViralStory = {
+  headline: string;
+  viral: string;
+  emoji: string;
+  heat: number;
+  leader: Token | null;
+  lookalikes: Token[];
 };
 
 export type ScreenerResponse = {
@@ -51,6 +68,7 @@ export type ScreenerResponse = {
   tokens: Token[];
   fresh: Token[];
   metas: Meta[];
+  viral: ViralStory[];
   desk: {
     ape: Token[];
     exit: Token[];
